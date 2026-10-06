@@ -10,7 +10,14 @@ static UIWindow *_window;
 void showToastFromRawData(UInt8 *eventData, NSError **error)
 {
     @autoreleasepool{
-        NSArray *data = [[NSString stringWithFormat:@"%s", eventData] componentsSeparatedByString:@";;"];
+        // %s uses the system C-string encoding, which drops or garbles UTF-8 Chinese.
+        NSString *raw = [NSString stringWithUTF8String:(const char *)eventData];
+        if (raw == nil)
+        {
+            *error = [NSError errorWithDomain:@"com.zjx.zxtouchsp" code:999 userInfo:@{NSLocalizedDescriptionKey:@"-1;;Toast text must be valid UTF-8.\r\n"}];
+            return;
+        }
+        NSArray *data = [raw componentsSeparatedByString:@";;"];
         if ([data count] < 3)
         {
             *error = [NSError errorWithDomain:@"com.zjx.zxtouchsp" code:999 userInfo:@{NSLocalizedDescriptionKey:@"-1;;The data format should be \"type;;content;;duration(in seconds)[];;position(0: top, 1: bottom, 2: left, 3: right)]\". For example, 0;;success;;1.5;;0.\r\n"}];
@@ -99,7 +106,12 @@ void showToastFromRawData(UInt8 *eventData, NSError **error)
         }
 
         UIFont * font = [UIFont systemFontOfSize:fontSize weight:UIFontWeightLight];
-        CGSize contentSize = [content sizeWithFont:font];
+        CGSize contentSize = [content boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)
+                                                    options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                                 attributes:@{NSFontAttributeName: font}
+                                                    context:nil].size;
+        contentSize.width = ceil(contentSize.width);
+        contentSize.height = ceil(contentSize.height);
 
         windowWidth = contentSize.width + 40;
         windowHeight = contentSize.height;
